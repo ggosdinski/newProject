@@ -26,9 +26,7 @@ mongoose
   .catch((err) => console.error('MongoDB connection error:', err));
 
 // Test route
-app.get('/', (req, res) => {
-  res.send('API is running...');
-});
+
 
 // Rutas de la API
 
