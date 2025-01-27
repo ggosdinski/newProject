@@ -4,7 +4,7 @@ info:
   description: API for managing movies
   version: 1.0.0
 servers:
-  - url: newproject-dlxk.onrender.com/
+  - url: https://newproject-dlxk.onrender.com
 paths:
   /movies:
     get:

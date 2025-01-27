@@ -35,7 +35,7 @@ Content-Type: application/json
 ###
 
 # DELETE remove a movie by ID (example movie)
-DELETE http://localhost:3000/movies/6795531e79de60af2ecf1e70 HTTP/1.1
+DELETE http://localhost:3000/movies/679553bf79de60af2ecf1e76 HTTP/1.1
 Content-Type: application/json
 
 ###

@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
+const cors = require('cors'); // Importa CORS
 const Movie = require('./models/movieModel');
 const swaggerUi = require('swagger-ui-express');
 const YAML = require('yamljs');
@@ -10,22 +11,28 @@ const YAML = require('yamljs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Carga el archivo de Swagger
-const swaggerDocument = YAML.load('./swagger.yaml'); // Este archivo lo vamos a crear
+// Configuración de CORS
+const corsOptions = {
+  origin: '*', // Permite cualquier origen
+  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Métodos permitidos
+  allowedHeaders: ['Content-Type', 'Authorization'], // Cabeceras permitidas
+};
+app.use(cors(corsOptions)); // Aplica la configuración de CORS
 
-// Ruta para la documentación Swagger
+// Carga el archivo de Swagger
+const swaggerDocument = YAML.load('./swagger.yaml');
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Middleware
 app.use(bodyParser.json());
 
-// MongoDB Connection
+// Conexión a MongoDB
 mongoose
   .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => console.error('MongoDB connection error:', err));
 
-// Test route
+// Ruta de prueba
 app.get('/', (req, res) => {
   res.send('API is running...');
 });
@@ -59,7 +66,6 @@ app.get('/movies/:id', async (req, res) => {
 app.post('/movies', async (req, res) => {
   const { title, director, releaseDate, genre, rating, duration } = req.body;
 
-  // Simple validation
   if (!title || !director || !releaseDate || !genre || !rating || !duration) {
     return res.status(400).json({ message: 'All fields are required' });
   }
@@ -70,7 +76,7 @@ app.post('/movies', async (req, res) => {
     releaseDate,
     genre,
     rating,
-    duration
+    duration,
   });
 
   try {
@@ -85,7 +91,6 @@ app.post('/movies', async (req, res) => {
 app.put('/movies/:id', async (req, res) => {
   const { title, director, releaseDate, genre, rating, duration } = req.body;
 
-  // Simple validation
   if (!title || !director || !releaseDate || !genre || !rating || !duration) {
     return res.status(400).json({ message: 'All fields are required' });
   }
@@ -122,7 +127,7 @@ app.delete('/movies/:id', async (req, res) => {
   }
 });
 
-// Start server
+// Inicia el servidor
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
