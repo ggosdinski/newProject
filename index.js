@@ -52,12 +52,13 @@ app.get('/movies', async (req, res) => {
 // GET a single movie by id
 app.get('/movies/:id', async (req, res) => {
   try {
-    const movie = await Movie.findById(req.params.id);
+    const movie = await Movie.findOne({ _id: req.params.id }); // Usa findOne para mayor flexibilidad
     if (!movie) {
       return res.status(404).json({ message: 'Movie not found' });
     }
     res.json(movie);
   } catch (err) {
+    console.error(err); // Agrega más información del error para depurar
     res.status(500).json({ message: 'Server error' });
   }
 });
