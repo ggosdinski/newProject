@@ -34,7 +34,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // MongoDB connection (make sure MongoDB is running)
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('Connected to MongoDB Atlas'))
   .catch(err => console.log('Error connecting to MongoDB', err));
 
@@ -90,12 +90,14 @@ app.get('/logout', (req, res) => {
 });
 
 // Authentication middleware for protected routes
-const ensureAuthenticated = (req, res, next) => {
+// Middleware para verificar la autenticación
+function ensureAuthenticated(req, res, next) {
   if (req.isAuthenticated()) {
-    return next();
+    return next(); // El usuario está autenticado, continuar con la petición
   }
-  res.status(401).send('Unauthorized');
-};
+  res.status(401).json({ message: "Not authenticated" }); // El usuario no está autenticado
+}
+
 
 // Protected endpoints
 // Get all movies
