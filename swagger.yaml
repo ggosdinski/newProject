@@ -14,11 +14,20 @@ paths:
           description: A list of movies
     post:
       summary: Create a new movie
+      security:
+        - oauth2: [user:email] # Usar el scope correcto para OAuth2
       requestBody:
         content:
           application/json:
             schema:
               type: object
+              required:
+                - title
+                - director
+                - releaseDate
+                - genre
+                - rating
+                - duration
               properties:
                 title:
                   type: string
@@ -26,15 +35,26 @@ paths:
                   type: string
                 releaseDate:
                   type: string
+                  format: date
                 genre:
                   type: string
                 rating:
                   type: number
+                  format: float
                 duration:
-                  type: number
+                  type: integer
+              example:
+                title: "Inception"
+                director: "Christopher Nolan"
+                releaseDate: "2010-07-16"
+                genre: "Sci-Fi"
+                rating: 8.8
+                duration: 148
       responses:
         "201":
           description: Movie created
+        "400":
+          description: Invalid input
   /movies/{id}:
     get:
       summary: Retrieve a movie by ID
@@ -71,15 +91,21 @@ paths:
                   type: string
                 releaseDate:
                   type: string
+                  format: date
                 genre:
                   type: string
                 rating:
                   type: number
+                  format: float
                 duration:
-                  type: number
+                  type: integer
+      security:
+        - oauth2: [user:email] # Usar el scope correcto para OAuth2
       responses:
         "200":
           description: Movie updated
+        "400":
+          description: Invalid input
     delete:
       summary: Delete a movie by ID
       parameters:
@@ -89,6 +115,17 @@ paths:
           description: The ID of the movie
           schema:
             type: string
+      security:
+        - oauth2: [user:email] # Usar el scope correcto para OAuth2
       responses:
         "200":
           description: Movie deleted
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flow: authorizationCode
+      authorizationUrl: https://github.com/login/oauth/authorize
+      tokenUrl: https://github.com/login/oauth/access_token
+      scopes:
+        user:email: "Access your email"

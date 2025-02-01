@@ -1,134 +1,172 @@
-require('dotenv').config();
+// Requires necessary packages
+require('dotenv').config();  // Load environment variables from .env file
 const express = require('express');
 const mongoose = require('mongoose');
+const passport = require('passport');
+const session = require('express-session');
 const bodyParser = require('body-parser');
-const cors = require('cors'); // Importa CORS
-const Movie = require('./models/movieModel');
+const cors = require('cors');
+const GitHubStrategy  = require('passport-github2').Strategy;
 const swaggerUi = require('swagger-ui-express');
-const YAML = require('yamljs');
+const yamljs = require('yamljs');
 
-// Inicializa la app
+// Load Swagger documentation
+const swaggerDocument = yamljs.load('./swagger.yaml');
+
+// Initialize Express application
 const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Configuración de CORS
-const corsOptions = {
-  origin: '*', // Permite cualquier origen
-  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Métodos permitidos
-  allowedHeaders: ['Content-Type', 'Authorization'], // Cabeceras permitidas
-};
-app.use(cors(corsOptions)); // Aplica la configuración de CORS
-
-// Carga el archivo de Swagger
-const swaggerDocument = YAML.load('./swagger.yaml');
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+const port = process.env.PORT || 3000;
 
 // Middleware
+app.use(cors());
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// Conexión a MongoDB
-mongoose
-  .connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('Connected to MongoDB'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+// Session configuration to maintain authentication state
+app.use(session({
+  secret: 'secret', 
+  resave: false,
+  saveUninitialized: true
+}));
 
-// Ruta de prueba
-app.get('/', (req, res) => {
-  res.send('API is running...');
+// Passport configuration
+app.use(passport.initialize());
+app.use(passport.session());
+
+// MongoDB connection (make sure MongoDB is running)
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('Connected to MongoDB Atlas'))
+  .catch(err => console.log('Error connecting to MongoDB', err));
+
+// Define movie schema
+const movieSchema = new mongoose.Schema({
+  title: String,
+  director: String,
+  releaseDate: String,
+  genre: String,
+  rating: Number,
+  duration: Number
 });
 
-// Rutas de la API
+const Movie = mongoose.model('Movie', movieSchema);
 
-// GET all movies
-app.get('/movies', async (req, res) => {
+// GitHub OAuth Passport strategy
+passport.use(new GitHubStrategy({
+  clientID: process.env.GITHUB_CLIENT_ID,
+  clientSecret: process.env.GITHUB_CLIENT_SECRET,
+  callbackURL: "http://localhost:3000/auth/github/callback"
+}, (accessToken, refreshToken, profile, done) => {
+  return done(null, profile);
+}));
+
+// Store user profile in session
+passport.serializeUser((user, done) => {
+  done(null, user);
+});
+
+// Retrieve user profile from session
+passport.deserializeUser((user, done) => {
+  done(null, user);
+});
+
+// GitHub authentication route
+app.get('/auth/github', passport.authenticate('github', { scope: ['user:email'] }));
+
+// Callback after GitHub authentication
+app.get('/auth/github/callback', 
+  passport.authenticate('github', { failureRedirect: '/login' }),
+  (req, res) => {
+    res.redirect('/api-docs');  // Redirect to Swagger documentation
+  });
+
+// Logout route
+app.get('/logout', (req, res) => {
+  req.logout((err) => {
+    if (err) {
+      return res.status(500).json({ message: 'Error logging out', err });
+    }
+    res.redirect('/');  // Redirect to the main page after logout
+  });
+});
+
+// Authentication middleware for protected routes
+const ensureAuthenticated = (req, res, next) => {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).send('Unauthorized');
+};
+
+// Protected endpoints
+// Get all movies
+app.get('/movies', async (req, res) => {  // No authentication required
   try {
     const movies = await Movie.find();
     res.json(movies);
-  } catch (err) {
-    res.status(500).json({ message: 'Error retrieving movies' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching movies', error });
   }
 });
 
-// GET a single movie by id
-app.get('/movies/:id', async (req, res) => {
-  try {
-    const movie = await Movie.findOne({ _id: req.params.id }); // Usa findOne para mayor flexibilidad
-    if (!movie) {
-      return res.status(404).json({ message: 'Movie not found' });
-    }
-    res.json(movie);
-  } catch (err) {
-    console.error(err); // Agrega más información del error para depurar
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// POST a new movie
-app.post('/movies', async (req, res) => {
+// Create a new movie
+app.post('/movies', ensureAuthenticated, async (req, res) => {
   const { title, director, releaseDate, genre, rating, duration } = req.body;
 
+  // Validation
   if (!title || !director || !releaseDate || !genre || !rating || !duration) {
-    return res.status(400).json({ message: 'All fields are required' });
+    return res.status(400).json({ message: "All fields are required" });
   }
 
-  const newMovie = new Movie({
-    title,
-    director,
-    releaseDate,
-    genre,
-    rating,
-    duration,
-  });
+  const newMovie = new Movie({ title, director, releaseDate, genre, rating, duration });
 
   try {
     const savedMovie = await newMovie.save();
     res.status(201).json(savedMovie);
-  } catch (err) {
-    res.status(500).json({ message: 'Error saving movie' });
+  } catch (error) {
+    res.status(400).json({ message: 'Error creating movie', error });
   }
 });
 
-// PUT update a movie by id
-app.put('/movies/:id', async (req, res) => {
+// Update a movie by ID
+app.put('/movies/:id', ensureAuthenticated, async (req, res) => {
+  const { id } = req.params;
   const { title, director, releaseDate, genre, rating, duration } = req.body;
 
-  if (!title || !director || !releaseDate || !genre || !rating || !duration) {
-    return res.status(400).json({ message: 'All fields are required' });
-  }
-
   try {
-    const updatedMovie = await Movie.findByIdAndUpdate(
-      req.params.id,
-      { title, director, releaseDate, genre, rating, duration },
-      { new: true }
-    );
-
+    const updatedMovie = await Movie.findByIdAndUpdate(id, { title, director, releaseDate, genre, rating, duration }, { new: true });
     if (!updatedMovie) {
       return res.status(404).json({ message: 'Movie not found' });
     }
-
     res.json(updatedMovie);
-  } catch (err) {
-    res.status(500).json({ message: 'Error updating movie' });
+  } catch (error) {
+    res.status(400).json({ message: 'Error updating movie', error });
   }
 });
 
-// DELETE a movie by id
-app.delete('/movies/:id', async (req, res) => {
-  try {
-    const deletedMovie = await Movie.findByIdAndDelete(req.params.id);
+// Delete a movie by ID
+app.delete('/movies/:id', ensureAuthenticated, async (req, res) => {
+  const { id } = req.params;
 
+  try {
+    const deletedMovie = await Movie.findByIdAndDelete(id);
     if (!deletedMovie) {
       return res.status(404).json({ message: 'Movie not found' });
     }
-
-    res.json({ message: 'Movie deleted' });
-  } catch (err) {
-    res.status(500).json({ message: 'Error deleting movie' });
+    res.json({ message: 'Movie deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting movie', error });
   }
 });
 
-// Inicia el servidor
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+// Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// Main route
+app.get('/', (req, res) => {
+  res.send('Welcome to the Movie API');
+});
+
+// Start the server
+app.listen(port, () => {
+  console.log(`Server running at http://localhost:${port}`);
 });
