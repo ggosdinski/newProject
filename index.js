@@ -91,13 +91,12 @@ app.get('/logout', (req, res) => {
 
 // Authentication middleware for protected routes
 // Middleware para verificar la autenticación
-function ensureAuthenticated(req, res, next) {
+function isAuthenticated(req, res, next) {
   if (req.isAuthenticated()) {
-    return next(); // El usuario está autenticado, continuar con la petición
+    return next();
   }
-  res.status(401).json({ message: "Not authenticated" }); // El usuario no está autenticado
+  res.status(401).json({ error: "Not authenticated. Logging in Github." });
 }
-
 
 // Protected endpoints
 // Get all movies
@@ -111,42 +110,77 @@ app.get('/movies', async (req, res) => {  // No authentication required
 });
 
 // Create a new movie
-app.post('/movies', ensureAuthenticated, async (req, res) => {
-  const { title, director, releaseDate, genre, rating, duration } = req.body;
-
-  // Validation
-  if (!title || !director || !releaseDate || !genre || !rating || !duration) {
-    return res.status(400).json({ message: "All fields are required" });
-  }
-
-  const newMovie = new Movie({ title, director, releaseDate, genre, rating, duration });
-
+app.post('/movies',  isAuthenticated, async (req, res) => {
   try {
-    const savedMovie = await newMovie.save();
-    res.status(201).json(savedMovie);
+    const { title, director, releaseDate, genre, rating, duration } = req.body;
+
+    // Validaciones
+    if (!title || !director || !releaseDate || !genre || rating === undefined || duration === undefined) {
+      return res.status(400).json({ error: "All fields are required." });
+    }
+
+    if (typeof rating !== 'number' || rating < 0 || rating > 10) {
+      return res.status(400).json({ error: "Rating must a number between 0 and 10." });
+    }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(releaseDate)) {
+      return res.status(400).json({ error: "Invalid format. Use YYYY-MM-DD." });
+    }
+
+    const newMovie = await Movie.create(req.body);
+    res.status(201).json(newMovie);
+
   } catch (error) {
-    res.status(400).json({ message: 'Error creating movie', error });
+    res.status(500).json({ error: "Server Error." });
   }
 });
+
 
 // Update a movie by ID
-app.put('/movies/:id', ensureAuthenticated, async (req, res) => {
-  const { id } = req.params;
-  const { title, director, releaseDate, genre, rating, duration } = req.body;
-
+app.put('/movies/:id', isAuthenticated, async (req, res) => {
   try {
-    const updatedMovie = await Movie.findByIdAndUpdate(id, { title, director, releaseDate, genre, rating, duration }, { new: true });
-    if (!updatedMovie) {
-      return res.status(404).json({ message: 'Movie not found' });
+    const movie = await Movie.findById(req.params.id);
+    if (!movie) {
+      return res.status(404).json({ error: "Movie not found" });
     }
+
+    const { title, director, releaseDate, genre, rating, duration } = req.body;
+
+    // Validaciones
+    if (!title || !director || !releaseDate || !genre || rating === undefined || duration === undefined) {
+      return res.status(400).json({ error: "All fields are required." });
+    }
+
+    // Validar rating
+    if (typeof rating !== 'number' || rating < 0 || rating > 10) {
+      return res.status(400).json({ error: "Rating must be a number between 0 and 10." });
+    }
+
+    // Validar formato de fecha (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(releaseDate)) {
+      return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD." });
+    }
+
+    // Validar si la fecha tiene un formato válido (comprobación adicional con Date)
+    const dateObj = new Date(releaseDate);
+    if (dateObj.toString() === "Invalid Date") {
+      return res.status(400).json({ error: "Invalid date." });
+    }
+
+    // Si las validaciones pasan, actualizar la película
+    const updatedMovie = await Movie.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(updatedMovie);
+
   } catch (error) {
-    res.status(400).json({ message: 'Error updating movie', error });
+    res.status(500).json({ error: "Server Error." });
   }
 });
 
+
+
 // Delete a movie by ID
-app.delete('/movies/:id', ensureAuthenticated, async (req, res) => {
+app.delete('/movies/:id',  isAuthenticated, async (req, res) => {
   const { id } = req.params;
 
   try {
